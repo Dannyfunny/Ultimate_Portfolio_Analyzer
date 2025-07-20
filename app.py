@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-npNaN = np.nan
 import yfinance as yf
 import plotly.graph_objects as go
 import plotly.express as px
@@ -12,17 +11,14 @@ from pypfopt.discrete_allocation import DiscreteAllocation
 import nltk
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from textblob import TextBlob
-import io
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# --- Initial Downloads ---
+# --- Ensure nltk vader lexicon ---
 def download_nltk_vader():
     try:
         nltk.data.find('sentiment/vader_lexicon.zip')
     except LookupError:
-        st.info("Downloading VADER lexicon for sentiment analysis...")
         nltk.download('vader_lexicon')
-
 download_nltk_vader()
 
 # --- Streamlit Page Configuration ---
@@ -117,6 +113,33 @@ def calculate_portfolio_metrics(transactions_df):
     st.session_state.portfolio_holdings = current_holdings_df
     return current_holdings_df, total_portfolio_market_value, total_portfolio_cost_basis, total_unrealized_pnl, total_unrealized_pnl_percent, total_realized_pnl
 
+# === NEW: Additional Portfolio Metrics ===
+@st.cache_data(ttl=1800)
+def calculate_additional_metrics(transactions_df, benchmark_symbol="^GSPC"):
+    """Returns (beta, alpha, info_ratio) annualized versus S&P500"""
+    if transactions_df.empty:
+        return None, None, None
+    symbols = transactions_df['Symbol'].unique().tolist()
+    if not symbols:
+        return None, None, None
+    end_date = pd.Timestamp.now()
+    start_date = end_date - pd.DateOffset(years=3)
+    prices = fetch_stock_data(symbols + [benchmark_symbol], start_date, end_date)
+    if prices.empty or benchmark_symbol not in prices.columns:
+        return None, None, None
+    returns = prices.pct_change().dropna()
+    port_returns = returns[symbols].mean(axis=1)
+    bench_returns = returns[benchmark_symbol]
+    if port_returns.std() == 0 or bench_returns.std() == 0:
+        return None, None, None
+    cov = np.cov(port_returns, bench_returns)[0, 1]
+    beta = cov / np.var(bench_returns)
+    alpha = (port_returns.mean() - bench_returns.mean() * beta) * 252
+    active_return = port_returns - bench_returns
+    tracking_error = np.std(active_return) * np.sqrt(252)
+    info_ratio = (port_returns.mean() - bench_returns.mean()) * 252 / tracking_error if tracking_error > 0 else None
+    return beta, alpha, info_ratio
+
 def fetch_fundamentals(symbol):
     try:
         ticker = yf.Ticker(symbol)
@@ -137,7 +160,6 @@ def fetch_fundamentals(symbol):
             'Industry': industry,
             'Key Executives': [o.get('name') for o in officers if 'name' in o][:3],
         }
-        # Condensed financials, take the first 4 columns for classic statements
         statements = {
             'Income Statement': ticker.financials.iloc[:, :4] if not ticker.financials.empty else None,
             'Balance Sheet': ticker.balance_sheet.iloc[:, :4] if not ticker.balance_sheet.empty else None,
@@ -148,7 +170,7 @@ def fetch_fundamentals(symbol):
         return {}, {}, {}
 
 def fetch_news(symbol, limit=5):
-    # Placeholder for news fetching (implement NewsAPI or scraping as needed)
+    # Placeholder
     return [
         {"headline": f"Latest headline {i+1} for {symbol}", "source": "News Source"} for i in range(limit)
     ]
@@ -158,7 +180,7 @@ def analyze_headline_sentiment(headline):
     vs = analyzer.polarity_scores(headline)
     return vs['compound']
 
-# --- Modules ---
+# --- MODULES ---
 def module_portfolio_overview():
     st.header("Your Portfolio at a Glance")
     st.markdown("---")
@@ -212,6 +234,16 @@ def module_portfolio_overview():
             'Shares': '{:,.2f}', 'Current Price': '${:,.2f}', 'Cost Basis': '${:,.2f}',
             'Market Value': '${:,.2f}', 'Unrealized P&L': '${:,.2f}', 'Unrealized P&L %': '{:,.2f}%'
         }))
+        # --- NEW METRICS DISPLAY ---
+        st.subheader("📊 Advanced Portfolio Metrics (vs S&P500)")
+        beta, alpha, info_ratio = calculate_additional_metrics(st.session_state.transactions)
+        col_b, col_a, col_ir = st.columns(3)
+        if beta is not None:
+            col_b.metric("Portfolio Beta", f"{beta:.2f}", help="Risk relative to S&P 500")
+        if alpha is not None:
+            col_a.metric("Alpha (annualized)", f"{alpha:.2%}", help="Outperformance vs S&P 500")
+        if info_ratio is not None:
+            col_ir.metric("Information Ratio", f"{info_ratio:.2f}", help="Outperformance per unit of tracking error")
         st.subheader("🛡️ Risk & Diversification")
         symbols = holdings_df['Symbol'].tolist()
         col_corr, col_sector = st.columns(2)
@@ -397,7 +429,7 @@ def module_advanced_risk():
     st.metric("Sharpe Ratio", f"{sharpe_ratio:.2f}")
     if sortino_ratio:
         st.metric("Sortino Ratio", f"{sortino_ratio:.2f}")
-    st.info('Higher Sharpe/Sortino is better (risk-adjusted performance). VaR/Drawdown measures downside risk.')
+    st.info('Higher Sharpe/Sortino is better (risk-adjusted performance). VaR/Drawdown measure downside risk.')
 
 def module_news_sentiment():
     st.header("📰 News & Sentiment")
