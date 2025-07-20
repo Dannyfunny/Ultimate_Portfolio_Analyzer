@@ -1,12 +1,9 @@
 streamlit
 pandas
 numpy
-pandas_ta
-plotly
 yfinance
-PyPortfolioOpt
+plotly
+pandas_ta
+pypfopt
 nltk
 textblob
-requests
-python-dateutil
-setuptools
