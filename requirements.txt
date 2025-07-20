@@ -1,7 +1,36 @@
-streamlit
-yfinance
-numpy
-pandas
-matplotlib
-seaborn
-scipy
+# Streamlit Application Framework
+streamlit>=1.28
+
+# Data Manipulation
+pandas>=2.0
+numpy>=1.22
+
+# Financial Data
+yfinance>=0.2.36
+
+# Technical Analysis Indicators
+pandas_ta>=0.3.14
+
+# Plotting and Visualization
+plotly>=5.15
+
+# Portfolio Optimization
+PyPortfolioOpt>=1.5.5
+
+# Sentiment Analysis
+nltk>=3.8
+textblob>=0.17
+
+# News and API Requests
+requests>=2.28
+
+# Date and Time Utilities
+python-dateutil>=2.8
+
+# Optional: For modular code and code formatting (e.g., large-scale project)
+# black
+# flake8
+
+# If authentication or a database is added in the future, consider:
+# streamlit-authenticator
+# sqlalchemy
