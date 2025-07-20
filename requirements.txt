@@ -1,36 +1,33 @@
-# Streamlit Application Framework
-streamlit
+# --- Streamlit Framework ---
+streamlit>=1.28
 
-# Data Manipulation
-pandas
-numpy
+# --- Data Manipulation ---
+pandas>=2.0
+numpy>=1.22
 
-# Financial Data
-yfinance
+# --- Financial Data & Analysis ---
+yfinance>=0.2.36
+pandas_ta>=0.3.14
 
-# Technical Analysis Indicators
-pandas_ta
+# --- Plotting & Visualization ---
+plotly>=5.15
 
-# Plotting and Visualization
-plotly
+# --- Portfolio Optimization ---
+PyPortfolioOpt>=1.5.5
 
-# Portfolio Optimization
-PyPortfolioOpt
+# --- Sentiment Analysis ---
+nltk>=3.8
+textblob>=0.17
 
-# Sentiment Analysis
-nltk
-textblob
+# --- News/HTTP requests ---
+requests>=2.28
 
-# News and API Requests
-requests
+# --- Date Handling ---
+python-dateutil>=2.8
 
-# Date and Time Utilities
-python-dateutil
+# --- Avoid pkg_resources error ---
+setuptools>=68
 
-# Optional: For modular code and code formatting (e.g., large-scale project)
-# black
-# flake8
-
-# If authentication or a database is added in the future, consider:
+# (Optional for further modularization)
 # streamlit-authenticator
 # sqlalchemy
