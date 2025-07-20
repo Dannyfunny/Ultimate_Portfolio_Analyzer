@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from numpy import NaN as npNaN
+npNaN = np.nan
 import yfinance as yf
 import plotly.graph_objects as go
 import plotly.express as px
