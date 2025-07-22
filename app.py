@@ -114,29 +114,58 @@ def calculate_portfolio_metrics(transactions_df):
     st.session_state.portfolio_holdings = current_holdings_df
     return current_holdings_df, total_portfolio_market_value, total_portfolio_cost_basis, total_unrealized_pnl, total_unrealized_pnl_percent, total_realized_pnl
 
+# --- FIXED FUNCTION ---
 @st.cache_data(ttl=1800)
 def calculate_additional_metrics(transactions_df, benchmark_symbol="^GSPC"):
+    """Returns (beta, alpha, info_ratio) annualized versus S&P500"""
     if transactions_df.empty:
         return None, None, None
-    symbols = transactions_df['Symbol'].unique().tolist()
-    if not symbols:
+        
+    portfolio_symbols = transactions_df['Symbol'].unique().tolist()
+    if not portfolio_symbols:
         return None, None, None
+
+    # --- Fetch data for all assets including the benchmark ---
+    symbols_to_fetch = portfolio_symbols + [benchmark_symbol]
     end_date = pd.Timestamp.now()
     start_date = end_date - pd.DateOffset(years=3)
-    prices = fetch_stock_data(symbols + [benchmark_symbol], start_date, end_date)
+    prices = fetch_stock_data(symbols_to_fetch, start_date, end_date)
+
+    # --- Validate the fetched data ---
     if prices.empty or benchmark_symbol not in prices.columns:
+        st.warning(f"Could not retrieve benchmark data ({benchmark_symbol}). Cannot calculate advanced metrics.")
         return None, None, None
+
+    # Filter for portfolio symbols that were successfully returned by the API
+    valid_symbols = [s for s in portfolio_symbols if s in prices.columns]
+    
+    if not valid_symbols:
+        st.warning("Could not retrieve market data for any of your holdings. Cannot calculate advanced metrics.")
+        return None, None, None
+        
+    # Optional: Warn user about any symbols that failed
+    failed_symbols = set(portfolio_symbols) - set(valid_symbols)
+    if failed_symbols:
+        st.warning(f"Could not fetch data for: {', '.join(failed_symbols)}. They will be excluded from Alpha/Beta calculations.")
+
+    # --- Perform calculations ONLY with valid data ---
     returns = prices.pct_change().dropna()
-    port_returns = returns[symbols].mean(axis=1)
+    
+    port_returns = returns[valid_symbols].mean(axis=1)
     bench_returns = returns[benchmark_symbol]
+    
     if port_returns.std() == 0 or bench_returns.std() == 0:
         return None, None, None
+        
     cov = np.cov(port_returns, bench_returns)[0, 1]
     beta = cov / np.var(bench_returns)
     alpha = (port_returns.mean() - bench_returns.mean() * beta) * 252
+    
     active_return = port_returns - bench_returns
     tracking_error = np.std(active_return) * np.sqrt(252)
-    info_ratio = (port_returns.mean() - bench_returns.mean()) * 252 / tracking_error if tracking_error > 0 else None
+    
+    info_ratio = ((port_returns.mean() - bench_returns.mean()) * 252) / tracking_error if tracking_error > 0 else None
+    
     return beta, alpha, info_ratio
 
 def fetch_fundamentals(symbol):
@@ -298,6 +327,7 @@ def module_fundamental_analysis():
         else:
             st.write(f"{name}:** Not available.")
 
+# --- FIXED FUNCTION ---
 def module_technical_analysis():
     st.header("📊 Technical Analysis Toolkit")
     holdings_df = st.session_state.portfolio_holdings
@@ -312,20 +342,30 @@ def module_technical_analysis():
     if df.empty:
         st.warning("No price data available for this stock.")
         return
+        
     df['SMA20'] = df['Close'].rolling(window=20).mean()
     df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
     df['BB_up'] = df['Close'].rolling(window=20).mean() + 2*df['Close'].rolling(window=20).std()
     df['BB_down'] = df['Close'].rolling(window=20).mean() - 2*df['Close'].rolling(window=20).std()
     df['RSI'] = ta.rsi(df['Close'], length=14)
-    df['MACD'] = ta.macd(df['Close'])['MACD_12_26_9']
+
+    # Safely calculate MACD to prevent errors with insufficient data
+    macd_df = ta.macd(df['Close'])
+    if macd_df is not None and not macd_df.empty and 'MACD_12_26_9' in macd_df.columns:
+        df['MACD'] = macd_df['MACD_12_26_9']
+    else:
+        # If calculation fails, create an empty column to avoid a crash during plotting
+        df['MACD'] = np.nan 
+    
     fig = go.Figure()
-    fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name="Candlestick"))
+    fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df.get('High'), low=df.get('Low'), close=df.get('Close'), name="Candlestick"))
     fig.add_trace(go.Scatter(x=df.index, y=df['SMA20'], mode="lines", name="SMA 20"))
     fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], mode="lines", name="EMA 20"))
     fig.add_trace(go.Scatter(x=df.index, y=df['BB_up'], mode='lines', name='BB Up', line=dict(dash='dot')))
     fig.add_trace(go.Scatter(x=df.index, y=df['BB_down'], mode='lines', name='BB Down', line=dict(dash='dot')))
     fig.update_layout(title=f"{selected} Candlestick & Indicators", xaxis_title='Date', yaxis_title='Price', height=600)
     st.plotly_chart(fig, use_container_width=True)
+    
     st.subheader("Oscillators")
     osc_fig = go.Figure()
     osc_fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI'))
