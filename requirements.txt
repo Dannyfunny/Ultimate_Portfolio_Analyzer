@@ -1,0 +1,10 @@
+streamlit
+pandas
+numpy<2.0
+yfinance
+plotly
+pandas-ta
+PyPortfolioOpt
+nltk
+textblob
+setuptools
